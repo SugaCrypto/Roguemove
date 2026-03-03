@@ -14,7 +14,7 @@ interface Props {
 
 function intentLabel(action: EnemyAction): { icon: string; text: string; color: string } {
     switch (action.type) {
-        case "attack": return { icon: "⚔", text: `ATK ${action.value}`, color: "#e05555" };
+        case "attack": return { icon: "⚔️", text: `ATK ${action.value}`, color: "#e05555" };
         case "heavy_attack": return { icon: "💥", text: `HEAVY ${action.value}`, color: "#ff3333" };
         case "block": return { icon: "🛡", text: `BLOCK +${action.value}`, color: "#5588e0" };
         case "heal": return { icon: "💚", text: `HEAL +${action.value}`, color: "#55bb55" };
@@ -62,19 +62,19 @@ export default function BattleArena({
 
                 {/* Enemy */}
                 <div className="enemy-fighter">
-                    <div className="fighter-img-wrap" style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+                    <div className="fighter-img-wrap">
                         <img src={enemy.img} className="fighter-img" style={{
                             transform: enemyAttacking ? "translateX(-40px) scale(1.1)" : "translateX(0) scale(1)",
                             filter: enemyAttacking ? "brightness(1.5) hue-rotate(300deg)" : "brightness(1)",
                         }} alt={enemy.name} />
                     </div>
-                    <div className="fighter-info" style={{ marginTop: 8 }}>
+                    <div className="fighter-info">
                         <div className="fighter-name">{enemy.name}</div>
                         <div className="hp-bar"><div className="hp-fill" style={{ width: `${ePct}%` }} /></div>
                         <div className="hp-text">{enemyHp} / {enemyMaxHp}</div>
                         {/* 敵の次の行動インテントをヒーローのエナジーと同じ位置に配置 */}
                         <div className="enemy-intent" style={{ color: intent.color, marginBottom: 0, marginTop: 4 }}>
-                            {intent.icon} NEXT: {intent.text}
+                            {intent.text}
                         </div>
                         <div style={{ height: 28, marginTop: 4 }}>
                             {enemyBlock > 0 && <div className="shield-badge">🛡 {enemyBlock}</div>}
