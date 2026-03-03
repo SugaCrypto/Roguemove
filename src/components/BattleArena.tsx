@@ -62,11 +62,7 @@ export default function BattleArena({
 
                 {/* Enemy */}
                 <div className="enemy-fighter">
-                    <div className="fighter-img-wrap" style={{ position: "relative", flexDirection: "column", alignItems: "center" }}>
-                        {/* 敵の次の行動インテントを画像の上に配置 */}
-                        <div className="enemy-intent" style={{ color: intent.color, position: "absolute", top: -30, whiteSpace: "nowrap" }}>
-                            {intent.icon} NEXT: {intent.text}
-                        </div>
+                    <div className="fighter-img-wrap" style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
                         <img src={enemy.img} className="fighter-img" style={{
                             transform: enemyAttacking ? "translateX(-40px) scale(1.1)" : "translateX(0) scale(1)",
                             filter: enemyAttacking ? "brightness(1.5) hue-rotate(300deg)" : "brightness(1)",
@@ -76,7 +72,11 @@ export default function BattleArena({
                         <div className="fighter-name">{enemy.name}</div>
                         <div className="hp-bar"><div className="hp-fill" style={{ width: `${ePct}%` }} /></div>
                         <div className="hp-text">{enemyHp} / {enemyMaxHp}</div>
-                        <div style={{ height: 28 }}>
+                        {/* 敵の次の行動インテントをヒーローのエナジーと同じ位置に配置 */}
+                        <div className="enemy-intent" style={{ color: intent.color, marginBottom: 0, marginTop: 4 }}>
+                            {intent.icon} NEXT: {intent.text}
+                        </div>
+                        <div style={{ height: 28, marginTop: 4 }}>
                             {enemyBlock > 0 && <div className="shield-badge">🛡 {enemyBlock}</div>}
                         </div>
                     </div>
