@@ -1,6 +1,6 @@
 import { memo, useState, useEffect, useRef, useCallback } from "react";
 import "./App.css";
-import { Card, FloatingText, GameState, RelicId } from "./types";
+import { Card, FloatingText, GameState } from "./types";
 import { ENEMIES } from "./data/enemies";
 import {
   createGame, advanceFloor, playCard as enginePlayCard,
