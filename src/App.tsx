@@ -1,123 +1,34 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { memo, useState, useEffect, useRef, useCallback } from "react";
 import "./App.css";
-import { Card, FloatingText, GameState } from "./types";
-import BattleArena from "./components/BattleArena";
+import { Card, FloatingText, GameState, RelicId } from "./types";
+import { ENEMIES } from "./data/enemies";
+import {
+  createGame, advanceFloor, playCard as enginePlayCard,
+  endTurn as engineEndTurn, skipFloor, getRewardCards,
+} from "./engine/gameEngine";
+import { upgradeCard } from "./data/cards";
+import { RELICS } from "./data/relics";
+import PixiBattleArena from "./components/PixiBattleArena";
 import HandArea from "./components/HandArea";
 import BattleLog from "./components/BattleLog";
 import RewardScreen from "./components/RewardScreen";
+import UpgradeScreen from "./components/UpgradeScreen";
+import DeckModal from "./components/DeckModal";
 
 const HERO_IMG = "/hero.png";
-
-export const ENEMIES = [
-  {
-    name: "SLIME", img: "/slime.png", hp: 50, pattern: [
-      { type: "attack", value: 8 }, { type: "attack", value: 8 }, { type: "heavy_attack", value: 14 },
-    ]
-  },
-  {
-    name: "GOBLIN", img: "/goblin.png", hp: 70, pattern: [
-      { type: "attack", value: 8 }, { type: "block", value: 6 }, { type: "attack", value: 12 },
-    ]
-  },
-  {
-    name: "ORC", img: "/orc.png", hp: 90, pattern: [
-      { type: "attack", value: 12 }, { type: "block", value: 10 }, { type: "heavy_attack", value: 20 }, { type: "block", value: 8 },
-    ]
-  },
-  {
-    name: "VAMPIRE", img: "/vampire.png", hp: 80, pattern: [
-      { type: "attack", value: 10 }, { type: "heal", value: 8 }, { type: "attack", value: 16 }, { type: "attack", value: 12 },
-    ]
-  },
-  {
-    name: "DRAGON", img: "/dragon.png", hp: 120, pattern: [
-      { type: "block", value: 15 }, { type: "heavy_attack", value: 28 }, { type: "attack", value: 15 }, { type: "attack", value: 15 },
-    ]
-  },
-] as const;
-
-type CardBlueprint = Omit<Card, "id">;
-
-const STARTER_DECK: CardBlueprint[] = [
-  ...Array(5).fill(null).map(() => ({ name: "Strike", type: "attack" as const, cost: 1, value: 6 })),
-  ...Array(4).fill(null).map(() => ({ name: "Defend", type: "defend" as const, cost: 1, value: 5 })),
-  { name: "Bash", type: "bash" as const, cost: 2, value: 8 },
-];
-
-const CARD_POOL: CardBlueprint[] = [
-  { name: "Whirlwind", type: "attack", cost: 1, value: 4 },
-  { name: "Quick Strike", type: "attack", cost: 0, value: 3 },
-  { name: "Fireball", type: "attack", cost: 2, value: 14 },
-  { name: "Double Strike", type: "attack", cost: 2, value: 5, hits: 2 },
-  { name: "Vampiric Strike", type: "attack", cost: 2, value: 8, heal: 4 },
-  { name: "Iron Wall", type: "defend", cost: 2, value: 10 },
-  { name: "Fortify", type: "defend", cost: 1, value: 7 },
-  { name: "Power Bash", type: "bash", cost: 2, value: 12 },
-];
-
 const CONTRACT = "0x0d8a46b953e0ed5c907331ec4d474d5d47b93cd779029bbe8fecd018497e6b2d";
 
-function shuffle<T>(arr: T[]): T[] {
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
-}
-
-function drawHand(deck: Card[], discard: Card[], nextId: () => number) {
-  let d = [...deck], dis = [...discard];
-  if (d.length < 5) { d = shuffle([...d, ...dis.map(c => ({ ...c, id: nextId() }))]); dis = []; }
-  const hand = d.splice(0, 5);
-  return { hand, deck: d, discard: dis };
-}
-
-function getRewardCards(nextId: () => number): Card[] {
-  return shuffle([...CARD_POOL]).slice(0, 3).map(c => ({ ...c, id: nextId() }));
-}
-
-function advanceFloor(prev: GameState, nextId: () => number, extraHp = 0, extraCard?: Card): GameState {
-  const nextFloor = prev.floorNum + 1;
-  if (nextFloor >= ENEMIES.length) return { ...prev, phase: "win", rewardCards: [] };
-  const next = ENEMIES[nextFloor];
-  let pool = [...prev.deck, ...prev.discard, ...prev.hand];
-  if (extraCard) pool.push({ ...extraCard, id: nextId() });
-  const drawn = drawHand(shuffle(pool), [], nextId);
-  const healLog = extraHp > 0 ? [`💚 HP+${extraHp}回復！`] : [];
-  return {
-    ...prev, phase: "battle",
-    heroHp: Math.min(prev.heroMaxHp, prev.heroHp + extraHp),
-    enemyHp: next.hp, enemyMaxHp: next.hp, enemyBlock: 0, enemyPatternIdx: 0,
-    heroShield: 0, floorNum: nextFloor,
-    hand: drawn.hand, deck: drawn.deck, discard: [],
-    log: [...prev.log, ...healLog, `✕ Floor ${nextFloor + 1} — ${next.name}が現れた！`],
-    turn: 1, energy: prev.maxEnergy, rewardCards: [],
-  };
-}
-
-function createGame(nextId: () => number): GameState {
-  const first = ENEMIES[0];
-  const allCards = shuffle(STARTER_DECK.map(c => ({ ...c, id: nextId() })));
-  const { hand, deck, discard } = drawHand(allCards, [], nextId);
-  return {
-    phase: "start",
-    heroHp: 80, heroMaxHp: 80, heroShield: 0,
-    energy: 3, maxEnergy: 3,
-    enemyHp: first.hp, enemyMaxHp: first.hp, enemyBlock: 0, enemyPatternIdx: 0,
-    floorNum: 0, hand, deck, discard,
-    log: ["✕ Floor 1 — SLIMEが現れた！"], turn: 1, rewardCards: [],
-  };
-}
-
-export default function App() {
+function App() {
   const uidRef = useRef(0);
   const uid = useCallback(() => ++uidRef.current, []);
   const [game, setGame] = useState<GameState>(() => createGame(() => ++uidRef.current));
+  const gameRef = useRef(game);
+  gameRef.current = game;
   const [floats, setFloats] = useState<FloatingText[]>([]);
   const [walletAddress, setWalletAddress] = useState("");
   const [heroAttacking, setHeroAttacking] = useState(false);
   const [enemyAttacking, setEnemyAttacking] = useState(false);
+  const [showDeck, setShowDeck] = useState(false);
 
   const currentEnemy = ENEMIES[Math.min(game.floorNum, ENEMIES.length - 1)];
 
@@ -127,6 +38,7 @@ export default function App() {
     setTimeout(() => setFloats(prev => prev.filter(f => f.id !== ft.id)), 1000);
   }, [uid]);
 
+  // ---- ウォレット ----
   const connectWallet = async () => {
     try {
       const nightly = (window as any)?.nightly?.aptos;
@@ -160,88 +72,49 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [game.phase]);
 
-  // ---- ターン終了（敵行動パターン） ----
-  const endTurn = useCallback(() => {
-    setGame(prev => {
-      if (prev.phase !== "battle") return prev;
-      const enemy = ENEMIES[Math.min(prev.floorNum, ENEMIES.length - 1)];
-      const action = enemy.pattern[prev.enemyPatternIdx % enemy.pattern.length];
-      const nextIdx = (prev.enemyPatternIdx + 1) % enemy.pattern.length;
-      let { heroHp, heroShield, enemyHp } = prev;
-      let enemyBlock = 0; // 敵ブロックはターン開始にリセット
-      let newLog = [...prev.log];
-
-      if (action.type === "attack" || action.type === "heavy_attack") {
-        const netDmg = Math.max(0, action.value - heroShield);
-        heroHp = Math.max(0, heroHp - netDmg);
-        addFloat(`-${netDmg}`, false, "#e05555");
-        newLog.push(`▶ ${enemy.name}の攻撃！${netDmg}ダメージ`);
-        setEnemyAttacking(true); setTimeout(() => setEnemyAttacking(false), 400);
-      } else if (action.type === "block") {
-        enemyBlock = action.value;
-        newLog.push(`▶ ${enemy.name}がブロック！+${action.value}`);
-      } else if (action.type === "heal") {
-        enemyHp = Math.min(prev.enemyMaxHp, enemyHp + action.value);
-        addFloat(`+${action.value}`, true, "#55bb55");
-        newLog.push(`▶ ${enemy.name}がHP回復！+${action.value}`);
-      }
-
-      const drawn = drawHand(prev.deck, [...prev.discard, ...prev.hand], uid);
-      return {
-        ...prev, heroHp, heroShield: 0, enemyHp, enemyBlock,
-        enemyPatternIdx: nextIdx,
-        hand: drawn.hand, deck: drawn.deck, discard: drawn.discard,
-        log: newLog, phase: heroHp <= 0 ? "lose" : "battle",
-        turn: prev.turn + 1, energy: prev.maxEnergy,
-      };
-    });
+  // ---- ターン終了 ----
+  const handleEndTurn = useCallback(() => {
+    const result = engineEndTurn(gameRef.current, uid);
+    setGame(result.state);
+    if (result.damageToHero > 0) {
+      addFloat(`-${result.damageToHero}`, false, "#e05555");
+      setEnemyAttacking(true); setTimeout(() => setEnemyAttacking(false), 400);
+    }
+    if (result.enemyHeal > 0) {
+      addFloat(`+${result.enemyHeal}`, true, "#55bb55");
+    }
+    if (result.poisonDmgToEnemy > 0) {
+      setTimeout(() => addFloat(`-${result.poisonDmgToEnemy} ☠`, true, "#55bb55"), 500);
+    }
+    if (result.poisonDmgToHero > 0) {
+      setTimeout(() => addFloat(`-${result.poisonDmgToHero} ☠`, false, "#55bb55"), 500);
+    }
   }, [addFloat, uid]);
 
+  // 手札にプレイ可能カードがなければ自動エンドターン
   useEffect(() => {
     if (game.phase !== "battle") return;
     const canPlay = game.hand.some(c => c.cost <= game.energy);
     if (!canPlay && game.hand.length > 0) {
-      const timer = setTimeout(() => endTurn(), 200);
+      const timer = setTimeout(() => handleEndTurn(), 200);
       return () => clearTimeout(timer);
     }
-  }, [game.energy, game.hand, game.phase, endTurn]);
+  }, [game.energy, game.hand, game.phase, handleEndTurn]);
 
-  // ---- カードプレイ（多段・吸血・敵ブロック対応） ----
-  const playCard = useCallback((card: Card) => {
-    setGame(prev => {
-      if (prev.phase !== "battle" || prev.energy < card.cost) return prev;
-      const enemy = ENEMIES[Math.min(prev.floorNum, ENEMIES.length - 1)];
-      let { energy, heroShield, enemyHp, heroHp, enemyBlock } = prev;
-      energy -= card.cost;
-      const newHand = prev.hand.filter(c => c.id !== card.id);
-      let newLog = [...prev.log];
-
-      if (card.type === "attack" || card.type === "bash") {
-        const hits = card.hits ?? 1;
-        const total = card.value * hits;
-        const toBlock = Math.min(enemyBlock, total);
-        const toHp = total - toBlock;
-        enemyBlock = enemyBlock - toBlock;
-        enemyHp = Math.max(0, enemyHp - toHp);
-        const label = hits > 1 ? `${card.value}×${hits}` : `${total}`;
-        addFloat(`-${total}`, true, "#e05555");
-        newLog.push(`⚔ ${card.name} → ${enemy.name}に${label}ダメージ！`);
-        if (card.heal && toHp > 0) {
-          heroHp = Math.min(prev.heroMaxHp, heroHp + card.heal);
-          addFloat(`+${card.heal}HP`, false, "#55bb55");
-          newLog.push(`💚 吸血！HP+${card.heal}回復`);
-        }
-        setHeroAttacking(true); setTimeout(() => setHeroAttacking(false), 400);
-      } else {
-        heroShield += card.value;
-        addFloat(`+${card.value} DEF`, false, "#5588e0");
-        newLog.push(`🛡 ${card.name} → シールド+${card.value}`);
-      }
-
-      const phase = enemyHp <= 0 ? "next_enemy" : prev.phase;
-      if (enemyHp <= 0) newLog.push(`✕ ${enemy.name}を倒した！`);
-      return { ...prev, energy, heroShield, enemyHp, heroHp, enemyBlock, hand: newHand, discard: [...prev.discard, card], log: newLog, phase };
-    });
+  // ---- カードプレイ ----
+  const handlePlayCard = useCallback((card: Card) => {
+    const result = enginePlayCard(gameRef.current, card);
+    setGame(result.state);
+    if (result.damageDealt > 0) {
+      addFloat(`-${result.damageDealt}`, true, "#e05555");
+      setHeroAttacking(true); setTimeout(() => setHeroAttacking(false), 400);
+    }
+    if (result.healAmount > 0) {
+      addFloat(`+${result.healAmount}HP`, false, "#55bb55");
+    }
+    if (result.shieldGained > 0) {
+      addFloat(`+${result.shieldGained} DEF`, false, "#5588e0");
+    }
   }, [addFloat]);
 
   // ---- 報酬フロー ----
@@ -256,23 +129,23 @@ export default function App() {
   const claimCard = useCallback((card: Card) => setGame(prev => advanceFloor(prev, uid, 0, card)), [uid]);
   const claimHeal = useCallback(() => setGame(prev => advanceFloor(prev, uid, 20)), [uid]);
   const skipReward = useCallback(() => setGame(prev => advanceFloor(prev, uid)), [uid]);
+  const goToUpgrade = useCallback(() => setGame(prev => ({ ...prev, phase: "upgrade_select" as const })), []);
+  const goBackToReward = useCallback(() => setGame(prev => ({ ...prev, phase: "reward" as const })), []);
 
-  // ---- SKIP FLOOR（テスト用） ----
-  const goNextEnemy = useCallback(() => {
+  const handleUpgradeCard = useCallback((card: Card) => {
     setGame(prev => {
-      const nextFloor = prev.floorNum + 1;
-      if (nextFloor >= ENEMIES.length) return { ...prev, phase: "win" };
-      const next = ENEMIES[nextFloor];
-      const drawn = drawHand(shuffle([...prev.deck, ...prev.discard, ...prev.hand]), [], uid);
-      return {
-        ...prev, phase: "battle",
-        enemyHp: next.hp, enemyMaxHp: next.hp, enemyBlock: 0, enemyPatternIdx: 0,
-        heroShield: 0, floorNum: nextFloor,
-        hand: drawn.hand, deck: drawn.deck, discard: [],
-        log: [...prev.log, `✕ Floor ${nextFloor + 1} — ${next.name}が現れた！`],
-        turn: 1, energy: prev.maxEnergy, rewardCards: [],
-      };
+      const upgraded = upgradeCard(card);
+      const updateList = (cards: Card[]) => cards.map(c => c.id === card.id ? upgraded : c);
+      return advanceFloor(
+        { ...prev, deck: updateList(prev.deck), discard: updateList(prev.discard), hand: updateList(prev.hand) },
+        uid,
+      );
     });
+  }, [uid]);
+
+  // ---- SKIP FLOOR（開発専用） ----
+  const goNextEnemy = useCallback(() => {
+    setGame(prev => skipFloor(prev, uid));
   }, [uid]);
 
   // ---- リスタート ----
@@ -282,6 +155,7 @@ export default function App() {
   }, []);
 
   const shortAddr = walletAddress ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}` : "";
+  const isDev = process.env.NODE_ENV === "development";
 
   return (
     <div className="app">
@@ -306,7 +180,16 @@ export default function App() {
         {walletAddress ? "◆ Movement Testnet 接続済み" : "◆ ウォレット未接続 — ローカルモードでプレイ中"}
       </div>
 
-      <BattleArena
+      {game.relics.length > 0 && (
+        <div style={{ display: "flex", gap: 8, padding: "4px 16px", fontSize: 11, color: "#888" }}>
+          {game.relics.map(rid => {
+            const r = RELICS.find(x => x.id === rid);
+            return r ? <span key={rid} title={`${r.name}: ${r.description}`}>{r.icon}</span> : null;
+          })}
+        </div>
+      )}
+
+      <PixiBattleArena
         heroHp={game.heroHp} heroMaxHp={game.heroMaxHp} heroShield={game.heroShield}
         energy={game.energy} maxEnergy={game.maxEnergy}
         enemyHp={game.enemyHp} enemyMaxHp={game.enemyMaxHp}
@@ -315,13 +198,18 @@ export default function App() {
         heroImg={HERO_IMG}
         heroAttacking={heroAttacking} enemyAttacking={enemyAttacking}
         floats={floats}
+        floorNum={game.floorNum}
+        heroStatuses={game.heroStatuses}
+        enemyStatuses={game.enemyStatuses}
       />
 
       <HandArea
         hand={game.hand} energy={game.energy} phase={game.phase}
         floorNum={game.floorNum} totalFloors={ENEMIES.length} turn={game.turn}
         deckCount={game.deck.length} discardCount={game.discard.length}
-        onPlayCard={playCard} onEndTurn={endTurn} onSkipFloor={goNextEnemy}
+        onPlayCard={handlePlayCard} onEndTurn={handleEndTurn}
+        onSkipFloor={isDev ? goNextEnemy : undefined}
+        onViewDeck={() => setShowDeck(true)}
       />
 
       <BattleLog log={game.log} />
@@ -338,20 +226,49 @@ export default function App() {
       )}
 
       {/* フロアクリア */}
-      {game.phase === "next_enemy" && (
-        <div className="screen-overlay">
-          <div className="screen-title-clear">FLOOR CLEAR!</div>
-          <div className="screen-subtitle">次の敵が待っている...</div>
-          <button className="btn btn-overlay" onClick={proceedToReward}>NEXT FLOOR ▶</button>
-        </div>
-      )}
+      {game.phase === "next_enemy" && (() => {
+        const availableRelics = RELICS.filter(r => !game.relics.includes(r.id));
+        const offerRelic = game.floorNum >= 3 && availableRelics.length > 0;
+        const relic = offerRelic ? availableRelics[game.floorNum % availableRelics.length] : null;
+        return (
+          <div className="screen-overlay">
+            <div className="screen-title-clear">FLOOR CLEAR!</div>
+            <div className="screen-subtitle">次の敵が待っている...</div>
+            {relic && (
+              <div style={{ margin: "12px 0", textAlign: "center" }}>
+                <div style={{ fontSize: 12, color: "#c9a84c", marginBottom: 4 }}>RELIC FOUND!</div>
+                <button
+                  className="btn btn-overlay"
+                  style={{ fontSize: 13, padding: "8px 20px" }}
+                  onClick={() => {
+                    setGame(prev => ({ ...prev, relics: [...prev.relics, relic.id] }));
+                    proceedToReward();
+                  }}
+                >
+                  {relic.icon} {relic.name} — {relic.description}
+                </button>
+              </div>
+            )}
+            <button className="btn btn-overlay" onClick={proceedToReward}>NEXT FLOOR ▶</button>
+          </div>
+        );
+      })()}
 
       {/* 報酬画面 */}
       {game.phase === "reward" && (
         <RewardScreen
           rewardCards={game.rewardCards}
           heroHp={game.heroHp} heroMaxHp={game.heroMaxHp}
-          onPickCard={claimCard} onHeal={claimHeal} onSkip={skipReward}
+          onPickCard={claimCard} onHeal={claimHeal} onUpgrade={goToUpgrade} onSkip={skipReward}
+        />
+      )}
+
+      {/* アップグレード選択画面 */}
+      {game.phase === "upgrade_select" && (
+        <UpgradeScreen
+          allCards={[...game.deck, ...game.discard, ...game.hand]}
+          onUpgrade={handleUpgradeCard}
+          onBack={goBackToReward}
         />
       )}
 
@@ -371,9 +288,26 @@ export default function App() {
               {walletAddress && <div className="screen-chain-msg">◆ 結果をブロックチェーンに保存しました！</div>}
             </>
           )}
+          <div className="run-stats">
+            <div>⚔ {game.stats.totalDamage} DMG</div>
+            <div>🃏 {game.stats.cardsPlayed} CARDS</div>
+            <div>⏱ {game.stats.turnsTotal} TURNS</div>
+            <div>💀 {game.stats.enemiesKilled} KILLS</div>
+            {game.relics.length > 0 && (
+              <div>{game.relics.map(rid => RELICS.find(r => r.id === rid)?.icon).join(" ")} RELICS</div>
+            )}
+          </div>
           <button className="btn btn-overlay" onClick={restart}>PLAY AGAIN</button>
         </div>
+      )}
+
+      {showDeck && (
+        <DeckModal
+          deck={game.deck} discard={game.discard} hand={game.hand}
+          onClose={() => setShowDeck(false)}
+        />
       )}
     </div>
   );
 }
+export default memo(App);

@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { Enemy, EnemyAction, FloatingText } from "../types";
 
 interface Props {
@@ -18,14 +19,15 @@ function intentLabel(action: EnemyAction): { icon: string; text: string; color: 
         case "heavy_attack": return { icon: "💥", text: `HEAVY ${action.value}`, color: "#ff3333" };
         case "block": return { icon: "🛡", text: `BLOCK +${action.value}`, color: "#5588e0" };
         case "heal": return { icon: "💚", text: `HEAL +${action.value}`, color: "#55bb55" };
+        case "debuff": return { icon: "☠", text: "DEBUFF", color: "#aa55aa" };
     }
 }
 
-export default function BattleArena({
+const BattleArena = ({
     heroHp, heroMaxHp, heroShield, energy, maxEnergy,
     enemyHp, enemyMaxHp, enemyBlock, enemyPatternIdx,
     enemy, heroImg, heroAttacking, enemyAttacking, floats,
-}: Props) {
+}: Props) => {
     const hpPct = (heroHp / heroMaxHp) * 100;
     const ePct = (enemyHp / enemyMaxHp) * 100;
     const intent = intentLabel(enemy.pattern[enemyPatternIdx % enemy.pattern.length]);
@@ -85,3 +87,5 @@ export default function BattleArena({
         </div>
     );
 }
+
+export default memo(BattleArena);

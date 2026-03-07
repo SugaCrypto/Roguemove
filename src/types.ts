@@ -1,10 +1,17 @@
-export type CardType = "attack" | "defend" | "bash";
-export type Phase = "start" | "battle" | "next_enemy" | "reward" | "win" | "lose";
-export type EnemyActionType = "attack" | "block" | "heavy_attack" | "heal";
+export type CardType = "attack" | "defend" | "bash" | "skill";
+export type Phase = "start" | "battle" | "next_enemy" | "reward" | "upgrade_select" | "win" | "lose";
+export type EnemyActionType = "attack" | "block" | "heavy_attack" | "heal" | "debuff";
+export type StatusType = "poison" | "strength" | "weak" | "vulnerable" | "burn";
+
+export interface StatusEffect {
+    type: StatusType;
+    stacks: number;
+}
 
 export interface EnemyAction {
     type: EnemyActionType;
     value: number;
+    applyStatus?: { type: StatusType; stacks: number };
 }
 
 export interface Card {
@@ -13,8 +20,20 @@ export interface Card {
     type: CardType;
     cost: number;
     value: number;
-    hits?: number;  // Double Strike など多段ヒット
-    heal?: number;  // Vampiric Strike など吸血効果
+    hits?: number;
+    heal?: number;
+    applyToEnemy?: { type: StatusType; stacks: number };
+    applyToSelf?: { type: StatusType; stacks: number };
+    upgraded?: boolean;
+}
+
+export type RelicId = "burning_blood" | "anchor" | "bag_of_marbles" | "ring_of_snake" | "molten_egg";
+
+export interface Relic {
+    id: RelicId;
+    name: string;
+    description: string;
+    icon: string;
 }
 
 export interface Enemy {
@@ -44,4 +63,15 @@ export interface GameState {
     log: string[];
     turn: number;
     rewardCards: Card[];
+    heroStatuses: StatusEffect[];
+    enemyStatuses: StatusEffect[];
+    relics: RelicId[];
+    stats: RunStats;
+}
+
+export interface RunStats {
+    totalDamage: number;
+    cardsPlayed: number;
+    turnsTotal: number;
+    enemiesKilled: number;
 }
